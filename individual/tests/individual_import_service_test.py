@@ -12,7 +12,13 @@ from individual.models import (
     IndividualDataSourceUpload,
     IndividualDataUploadRecords,
 )
-from individual.tests.test_helpers import generate_random_string
+from individual.tests.test_helpers import (
+    generate_random_string,
+    create_sp_role,
+    create_test_village,
+    create_test_interactive_user,
+    assign_user_districts,
+)
 from unittest.mock import MagicMock, patch
 
 
@@ -27,20 +33,28 @@ def count_csv_records(file_path):
 
 
 class IndividualImportServiceTest(TestCase):
-    user = None
-    service = None
 
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
 
-        cls.user = LogInHelper().get_or_create_user_api()
-        cls.service = IndividualImportService(cls.user)
+        cls.admin_user = LogInHelper().get_or_create_user_api()
 
         cls.csv_file_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'individual_upload.csv')
         # SimpleUploadedFile requires a bytes-like object so use 'rb' instead of 'r'
         with open(cls.csv_file_path, 'rb') as f:
             cls.csv_content = f.read()
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.village_a = create_test_village({
+            'name': 'Washington DC',
+            'code': 'VsA',
+        })
+        cls.village_b = create_test_village({
+            'name': 'Fairfax',
+            'code': 'VsB'
+        })
 
 
     def test_import_individuals(self):
@@ -53,7 +67,8 @@ class IndividualImportServiceTest(TestCase):
 
         mock_workflow = self._create_mock_workflow()
 
-        result = self.service.import_individuals(csv_file, mock_workflow, "group_code")
+        service = IndividualImportService(self.admin_user)
+        result = service.import_individuals(csv_file, mock_workflow, "group_code")
         self.assertEqual(result['success'], True)
 
         # Check that an IndividualDataSourceUpload object was saved in the database
@@ -78,7 +93,7 @@ class IndividualImportServiceTest(TestCase):
 
         # Check that workflow is triggered
         mock_workflow.run.assert_called_once_with({
-            'user_uuid': str(self.user.id),
+            'user_uuid': str(self.admin_user.id),
             'upload_uuid': str(upload.uuid),
         })
 
@@ -105,7 +120,8 @@ class IndividualImportServiceTest(TestCase):
         mock_fetch_summary.return_value = mock_invalid_items
 
         individual_sources = MagicMock()
-        result = self.service.validate_import_individuals(upload_id, individual_sources)
+        service = IndividualImportService(self.admin_user)
+        result = service.validate_import_individuals(upload_id, individual_sources)
 
         mock_load_dataframe.assert_called_once_with(individual_sources)
 
@@ -142,7 +158,8 @@ class IndividualImportServiceTest(TestCase):
         mock_fetch_summary.return_value = mock_invalid_items
 
         individual_sources = MagicMock()
-        result = self.service.validate_import_individuals(upload_id, individual_sources)
+        service = IndividualImportService(self.admin_user)
+        result = service.validate_import_individuals(upload_id, individual_sources)
 
         mock_load_dataframe.assert_called_once_with(individual_sources)
 
@@ -160,3 +177,63 @@ class IndividualImportServiceTest(TestCase):
                 self.assertFalse(email_validation.get('success'))
                 self.assertEqual(email_validation.get('field_name'), 'email')
                 self.assertEqual(email_validation.get('note'), "'email' Field value 'john@example.com' is duplicated")
+
+
+    @patch('individual.services.load_dataframe')
+    @patch('individual.services.fetch_summary_of_broken_items')
+    def test_validate_import_individuals_row_level_security(self, mock_fetch_summary, mock_load_dataframe):
+        # set up a user assigned the district village_a is in
+        sp_role = create_sp_role(self.admin_user)
+        dist_a_user = create_test_interactive_user(
+            username="districtAUserS", roles=[sp_role.id])
+        district_a_code = self.village_a.parent.parent.code
+        assign_user_districts(dist_a_user, ["R1D1", district_a_code])
+
+        dataframe = pd.read_csv(self.csv_file_path)
+        dataframe['id'] = dataframe.index+1
+        mock_load_dataframe.return_value = dataframe
+
+        mock_invalid_items = {"invalid_items_count": 2}
+        mock_fetch_summary.return_value = mock_invalid_items
+
+        upload_id = uuid.uuid4()
+        individual_sources = MagicMock()
+
+        service = IndividualImportService(dist_a_user)
+        result = service.validate_import_individuals(upload_id, individual_sources)
+
+        mock_load_dataframe.assert_called_once_with(individual_sources)
+
+        # Assert that the result contains the validated dataframe and summary of invalid items
+        self.assertEqual(result['success'], True)
+        self.assertEqual(len(result['data']), dataframe.shape[0])
+        self.assertEqual(result['summary_invalid_items'], mock_invalid_items)
+
+        # Check that the validation flagged lack of permission and unrecognized locations
+        validated_rows = result['data']
+        for row in validated_rows:
+            if row['row']['location_name'] == self.village_a.name:
+                self.assertIn('validations', row)
+                loc_validation = row['validations']['location_name']
+                self.assertTrue(
+                    loc_validation.get('success'),
+                    f'Expected rows with location_name={self.village_a.name} to pass validation, but failed: {loc_validation}'
+                )
+                self.assertEqual(loc_validation.get('field_name'), 'location_name')
+            elif row['row']['location_name'] == self.village_b.name:
+                loc_validation = row['validations']['location_name']
+                self.assertFalse(loc_validation.get('success'))
+                self.assertEqual(loc_validation.get('field_name'), 'location_name')
+                self.assertEqual(
+                    loc_validation.get('note'),
+                    "'location_name' value 'Fairfax' is outside the current user's location permissions."
+                )
+            elif row['row']['location_name'] == 'Washington D.C.':
+                loc_validation = row['validations']['location_name']
+                self.assertFalse(loc_validation.get('success'))
+                self.assertEqual(loc_validation.get('field_name'), 'location_name')
+                self.assertEqual(
+                    loc_validation.get('note'),
+                    "'location_name' value 'Washington D.C.' is not a valid location name. "
+                    "Please check the spelling against the list of locations in the system."
+                )

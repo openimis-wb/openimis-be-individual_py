@@ -37,6 +37,7 @@ from individual.validation import (
 )
 from core.services.utils import check_authentication as check_authentication, output_exception, output_result_success, \
     model_representation
+from location.models import Location, LocationManager
 from tasks_management.models import Task
 from tasks_management.services import UpdateCheckerLogicServiceMixin, CreateCheckerLogicServiceMixin, \
     crud_business_data_builder, DeleteCheckerLogicServiceMixin
@@ -565,9 +566,18 @@ class IndividualImportService:
 
     def synchronize_data_for_reporting(self, upload_id: uuid):
         self._synchronize_individual(upload_id)
+
     @staticmethod
-    def process_chunk(chunk, properties, unique_validations, calculation, calculation_uuid):
+    def process_chunk(
+        chunk,
+        properties,
+        unique_validations,
+        loc_name_dist_ids_from_db,
+        user_allowed_loc_ids,
+    ):
         validated_dataframe = []
+        check_location = 'location_name' in chunk.columns
+
         for _, row in chunk.iterrows():
             field_validation = {'row': row.to_dict(), 'validations': {}}
             for field, field_properties in properties.items():
@@ -580,17 +590,17 @@ class IndividualImportService:
                 if "uniqueness" in field_properties and field in row:
                     field_validation['validations'][f'{field}_uniqueness'] = IndividualImportService._handle_uniqueness(row, field, unique_validations)
 
+            if 'location_name' in chunk.columns:
+                field_validation['validations']['location_name'] = IndividualImportService._validate_location_permission(row.location_name, loc_name_dist_ids_from_db, user_allowed_loc_ids)
+
             validated_dataframe.append(field_validation)
 
         return validated_dataframe
 
-    def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid, num_workers=4):
+    def _validate_possible_individuals(self, dataframe: DataFrame, upload_id: uuid):
         schema_dict = json.loads(IndividualConfig.individual_schema)
         properties = schema_dict.get("properties", {})
-        
-        calculation_uuid = IndividualConfig.validation_calculation_uuid
-        calculation = get_calculation_object(calculation_uuid)
-        
+
         unique_fields = [field for field, props in properties.items() if "uniqueness" in props]
         unique_validations = {}
         if unique_fields:
@@ -599,26 +609,49 @@ class IndividualImportService:
                 for field in unique_fields
             }
 
-        chunk_size = math.ceil(len(dataframe) / num_workers)
-        data_chunks = [dataframe[i:i + chunk_size] for i in range(0, dataframe.shape[0], chunk_size)]
+        check_location = 'location_name' in dataframe.columns
+        if check_location:
+            # Issue a single DB query instead of per row for efficiency
+            loc_name_dist_ids_from_db = self._query_location_district_ids(dataframe.location_name)
+            user_allowed_loc_ids = LocationManager().get_allowed_ids(self.user)
+        else:
+            loc_name_dist_ids_from_db = None
+            user_allowed_loc_ids = None
 
-        validated_dataframe = []
-        with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
-            futures = [executor.submit(
-                self.process_chunk, 
-                chunk, 
-                properties, 
-                unique_validations, 
-                calculation, 
-                calculation_uuid
-            ) for chunk in data_chunks]
-
-            for future in concurrent.futures.as_completed(futures):
-                validated_dataframe.extend(future.result())
+        # TODO: Use ProcessPoolExecutor after resolving django dependency loading issue
+        validated_dataframe = IndividualImportService.process_chunk(
+            dataframe,
+            properties,
+            unique_validations,
+            loc_name_dist_ids_from_db,
+            user_allowed_loc_ids
+        )
 
         self.save_validation_error_in_data_source_bulk(validated_dataframe)
         invalid_items = fetch_summary_of_broken_items(upload_id)
         return validated_dataframe, invalid_items
+
+    @staticmethod
+    def _query_location_district_ids(location_names):
+        locations = Location.objects.filter(type="V", name__in=location_names.unique().tolist())
+        return {loc.name: loc.parent.parent.id for loc in locations}
+
+    @staticmethod
+    def _validate_location_permission(location_name, loc_name_dist_ids_from_db, user_allowed_loc_ids):
+        result = {
+            'field_name': 'location_name',
+        }
+        if loc_name_dist_ids_from_db is None and user_allowed_loc_ids is None:
+            result['success'] = True
+        elif location_name not in loc_name_dist_ids_from_db:
+            result['success'] = False
+            result['note'] = f"'location_name' value '{location_name}' is not a valid location name. Please check the spelling against the list of locations in the system."
+        elif loc_name_dist_ids_from_db[location_name] not in user_allowed_loc_ids:
+            result['success'] = False
+            result['note'] = f"'location_name' value '{location_name}' is outside the current user's location permissions."
+        else:
+            result['success'] = True
+        return result
 
 
     @staticmethod
