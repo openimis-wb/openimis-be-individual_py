@@ -6,7 +6,7 @@ from django.urls import reverse
 from core.test_helpers import create_test_interactive_user
 
 
-class ViewTest(APITestCase):
+class TestView(APITestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
