@@ -39,6 +39,9 @@ DEFAULT_CONFIG = {
     "individual_mask_fields": [
         'json_ext.beneficiary_data_source',
         'json_ext.educated_level'
+    ],
+    "individual_base_fields": [
+        'first_name', 'last_name', 'dob', 'location_name', 'id'
     ]
 }
 
@@ -81,6 +84,7 @@ class IndividualConfig(AppConfig):
     enable_maker_checker_for_group_update = None
     individual_mask_fields = None
     individual_masking_enabled = None
+    individual_base_fields = None
 
     def ready(self):
         from core.models import ModuleConfiguration
