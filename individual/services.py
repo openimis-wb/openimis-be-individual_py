@@ -641,7 +641,9 @@ class IndividualImportService:
         result = {
             'field_name': 'location_name',
         }
-        if loc_name_dist_ids_from_db is None and user_allowed_loc_ids is None:
+        if location_name is None or location_name == "":
+            result['success'] = True
+        elif loc_name_dist_ids_from_db is None and user_allowed_loc_ids is None:
             result['success'] = True
         elif location_name not in loc_name_dist_ids_from_db:
             result['success'] = False

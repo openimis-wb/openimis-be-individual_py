@@ -189,7 +189,7 @@ class IndividualImportServiceTest(TestCase):
         district_a_code = self.village_a.parent.parent.code
         assign_user_districts(dist_a_user, ["R1D1", district_a_code])
 
-        dataframe = pd.read_csv(self.csv_file_path)
+        dataframe = pd.read_csv(self.csv_file_path, na_filter=False)
         dataframe['id'] = dataframe.index+1
         mock_load_dataframe.return_value = dataframe
 
@@ -211,29 +211,50 @@ class IndividualImportServiceTest(TestCase):
 
         # Check that the validation flagged lack of permission and unrecognized locations
         validated_rows = result['data']
-        for row in validated_rows:
-            if row['row']['location_name'] == self.village_a.name:
-                self.assertIn('validations', row)
-                loc_validation = row['validations']['location_name']
-                self.assertTrue(
-                    loc_validation.get('success'),
-                    f'Expected rows with location_name={self.village_a.name} to pass validation, but failed: {loc_validation}'
-                )
-                self.assertEqual(loc_validation.get('field_name'), 'location_name')
-            elif row['row']['location_name'] == self.village_b.name:
-                loc_validation = row['validations']['location_name']
-                self.assertFalse(loc_validation.get('success'))
-                self.assertEqual(loc_validation.get('field_name'), 'location_name')
-                self.assertEqual(
-                    loc_validation.get('note'),
-                    "'location_name' value 'Fairfax' is outside the current user's location permissions."
-                )
-            elif row['row']['location_name'] == 'Washington D.C.':
-                loc_validation = row['validations']['location_name']
-                self.assertFalse(loc_validation.get('success'))
-                self.assertEqual(loc_validation.get('field_name'), 'location_name')
-                self.assertEqual(
-                    loc_validation.get('note'),
-                    "'location_name' value 'Washington D.C.' is not a valid location name. "
-                    "Please check the spelling against the list of locations in the system."
-                )
+
+        # User from district a can import individuals from village a
+        rows_village_a = [row for row in validated_rows if row['row']['location_name'] == self.village_a.name]
+        self.assertTrue(rows_village_a, f'Expected at least one row with location_name={self.village_a.name}')
+        for row in rows_village_a:
+            loc_validation = row['validations']['location_name']
+            self.assertTrue(
+                loc_validation.get('success'),
+                f'Expected rows with location_name={self.village_a.name} to pass validation, but failed: {loc_validation}'
+            )
+            self.assertEqual(loc_validation.get('field_name'), 'location_name')
+
+        # User from district a can import individuals without location specified
+        rows_empty_location = [row for row in validated_rows if row['row']['location_name'] == '']
+        self.assertTrue(rows_empty_location, 'Expected at least one row with location_name=""')
+        for row in rows_empty_location:
+            loc_validation = row['validations']['location_name']
+            self.assertTrue(
+                loc_validation.get('success'),
+                'Expected rows with empty location_name to pass validation, but failed: {loc_validation}'
+            )
+            self.assertEqual(loc_validation.get('field_name'), 'location_name')
+
+        # User from district a cannot import individuals from village b
+        rows_village_b = [row for row in validated_rows if row['row']['location_name'] == self.village_b.name]
+        self.assertTrue(rows_village_b, f'Expected at least one row with location_name={self.village_b.name}')
+        for row in rows_village_b:
+            loc_validation = row['validations']['location_name']
+            self.assertFalse(loc_validation.get('success'))
+            self.assertEqual(loc_validation.get('field_name'), 'location_name')
+            self.assertEqual(
+                loc_validation.get('note'),
+                f"'location_name' value '{self.village_b.name}' is outside the current user's location permissions."
+            )
+
+        # Unknown individual location
+        rows_unknown_loc = [row for row in validated_rows if row['row']['location_name'] == 'Washington D.C.']
+        self.assertTrue(rows_unknown_loc, 'Expected at least one row with location_name="Washington D.C."')
+        for row in rows_unknown_loc:
+            loc_validation = row['validations']['location_name']
+            self.assertFalse(loc_validation.get('success'))
+            self.assertEqual(loc_validation.get('field_name'), 'location_name')
+            self.assertEqual(
+                loc_validation.get('note'),
+                "'location_name' value 'Washington D.C.' is not a valid location name. "
+                "Please check the spelling against the list of locations in the system."
+            )

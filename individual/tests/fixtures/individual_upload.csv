@@ -4,4 +4,5 @@ Bob,Foo,1988-01-01,Washington DC,SPOUSE,1,AA
 Eric,Foo,2020-01-01,Washington DC,SON,1,AA
 Ann,Foo,2020-01-01,Washington D.C.,DAUGHTER,1,AA
 Michelle,Bar,1990-01-01,Fairfax,HEAD,0,BB
+Frank,Baz,1998-01-01,,HEAD,0,CC
 
