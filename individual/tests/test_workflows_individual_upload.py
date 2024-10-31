@@ -6,6 +6,7 @@ from individual.models import (
     IndividualDataUploadRecords,
 )
 from individual.workflows.base_individual_upload import process_import_individuals_workflow
+from individual.tests.test_helpers import create_test_village
 from unittest.mock import patch
 import uuid
 
@@ -16,15 +17,19 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
     def setUpClass(cls):
         super().setUpClass()
         # Patch validate_dataframe_headers as it is already tested separately
-        cls.patcher = patch(
+        cls.validate_headers_patcher = patch(
             "individual.workflows.utils.BasePythonWorkflowExecutor.validate_dataframe_headers",
             lambda self: None
         )
-        cls.patcher.start()
+        cls.validate_headers_patcher.start()
+
+        cls.schema_patcher = patch("individual.apps.IndividualConfig.individual_schema", "{}")
+        cls.schema_patcher.start()
 
     @classmethod
     def tearDownClass(cls):
-        cls.patcher.stop()
+        cls.validate_headers_patcher.stop()
+        cls.schema_patcher.stop()
         super().tearDownClass()
 
     def setUp(self):
@@ -46,15 +51,26 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
         )
         upload_record.save(user=self.user.user)
 
+        self.village = create_test_village({
+            'name': 'McLean',
+            'code': 'VwA',
+        })
         self.valid_data_source = IndividualDataSource(
             upload_id=self.upload_uuid,
-            json_ext={"first_name": "John", "last_name": "Doe", "dob": "1980-01-01"}
+            json_ext={
+                "first_name": "John",
+                "last_name": "Doe",
+                "dob": "1980-01-01",
+                "location_name": self.village.name,
+            }
         )
         self.valid_data_source.save(user=self.user)
 
         self.invalid_data_source = IndividualDataSource(
             upload_id=self.upload_uuid,
-            json_ext={"first_name": "Jane Workflow"}
+            json_ext={
+                "first_name": "Jane Workflow",
+            }
         )
         self.invalid_data_source.save(user=self.user)
 
@@ -83,22 +99,22 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
         for entry in data_entries:
             self.assertIsNone(entry.individual_id)
 
-    @patch('individual.services.IndividualConfig.enable_maker_checker_for_individual_upload', False)
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', False)
     def test_process_import_individuals_workflow_with_all_valid_entries(self):
         # Update invalid entry in IndividualDataSource to valid data
-        IndividualDataSource.objects.filter(
-                upload_id=self.upload_uuid, json_ext={"first_name": "Jane Workflow"}
-        ).update(
-            json_ext={
-                "first_name": "Jane Workflow", "last_name": "Doe", "dob": "1982-01-01"
-            }
-        )
+        self.invalid_data_source.json_ext={
+            "first_name": "Jane Workflow",
+            "last_name": "Doe",
+            "dob": "1982-01-01",
+            "location_name": None,
+        }
+        self.invalid_data_source.save(user=self.user)
 
         process_import_individuals_workflow(self.user_uuid, self.upload_uuid)
 
         upload = IndividualDataSourceUpload.objects.get(id=self.upload_uuid)
 
-        self.assertEqual(upload.status, "SUCCESS")
+        self.assertEqual(upload.status, "SUCCESS", upload.error)
         self.assertEqual(upload.error, {})
 
         # Verify that individual IDs have been assigned to data entries in IndividualDataSource
@@ -106,16 +122,16 @@ class ProcessImportIndividualsWorkflowTest(TestCase):
         for entry in data_entries:
             self.assertIsNotNone(entry.individual_id)
 
-    @patch('individual.services.IndividualConfig.enable_maker_checker_for_individual_upload', True)
+    @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_upload', True)
     def test_process_import_individuals_workflow_with_all_valid_entries_with_maker_checker(self):
         # Update invalid entry in IndividualDataSource to valid data
-        IndividualDataSource.objects.filter(
-                upload_id=self.upload_uuid, json_ext={"first_name": "Jane Workflow"}
-        ).update(
-            json_ext={
-                "first_name": "Jane Workflow", "last_name": "Doe", "dob": "1982-01-01"
-            }
-        )
+        self.invalid_data_source.json_ext={
+            "first_name": "Jane Workflow",
+            "last_name": "Doe",
+            "dob": "1982-01-01",
+            "location_name": None,
+        }
+        self.invalid_data_source.save(user=self.user)
 
         process_import_individuals_workflow(self.user_uuid, self.upload_uuid)
 
