@@ -1,6 +1,7 @@
 from django.test import TestCase
 from core.test_helpers import create_test_interactive_user
 from individual.models import (
+    Individual,
     IndividualDataSource,
     IndividualDataSourceUpload,
     IndividualDataUploadRecords,
@@ -68,22 +69,25 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
             'name': 'McLean',
             'code': 'VwA',
         })
+        self.individual1_updated_first_name = "John"
         self.valid_data_source = IndividualDataSource(
             upload_id=self.upload_uuid,
             json_ext={
                 "ID": str(self.individual1.id),
-                "first_name": "John",
+                "first_name": self.individual1_updated_first_name,
                 "last_name": "Doe",
                 "dob": "1980-01-01",
+                "location_name": self.village.name,
             }
         )
         self.valid_data_source.save(user=self.user)
 
+        self.individual2_updated_first_name = "Jane"
         self.invalid_data_source = IndividualDataSource(
             upload_id=self.upload_uuid,
             json_ext={
                 "ID": str(uuid.uuid4()),
-                "first_name": "Jane",
+                "first_name": self.individual2_updated_first_name,
             }
         )
         self.invalid_data_source.save(user=self.user)
@@ -111,12 +115,20 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         for entry in data_entries:
             self.assertIsNone(entry.individual_id)
 
+        # individual data should not be updated
+        individual1_from_db = Individual.objects.get(id=self.individual1.id)
+        self.assertNotEqual(individual1_from_db.first_name, self.individual1_updated_first_name)
+
+        individual2_from_db = Individual.objects.get(id=self.individual2.id)
+        self.assertNotEqual(individual2_from_db.first_name, self.individual2_updated_first_name)
+
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_update', False)
     def test_process_update_individuals_workflow_with_all_valid_entries(self):
         # Update invalid entry in IndividualDataSource to valid data
         self.invalid_data_source.json_ext = {
             "ID": str(self.individual2.id),
-            "first_name": "Jane",
+            "first_name": self.individual2_updated_first_name,
+            "location_name": None,
         }
         self.invalid_data_source.save(user=self.user)
 
@@ -132,12 +144,22 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         for entry in data_entries:
             self.assertIsNotNone(entry.individual_id)
 
+        # individual data should be updated
+        individual1_from_db = Individual.objects.get(id=self.individual1.id)
+        self.assertEqual(individual1_from_db.first_name, self.individual1_updated_first_name)
+        self.assertEqual(individual1_from_db.location.name, self.village.name)
+
+        individual2_from_db = Individual.objects.get(id=self.individual2.id)
+        self.assertEqual(individual2_from_db.first_name, self.individual2_updated_first_name)
+        self.assertIsNone(individual2_from_db.location)
+
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_update', True)
     def test_process_update_individuals_workflow_with_maker_checker_enabled(self):
         # Update invalid entry in IndividualDataSource to valid data
         self.invalid_data_source.json_ext = {
             "ID": str(self.individual2.id),
             "first_name": "Jane",
+            "location_name": None,
         }
         self.invalid_data_source.save(user=self.user)
 
@@ -153,3 +175,9 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         for entry in data_entries:
             self.assertIsNone(entry.individual_id)
 
+        # individual data should not be updated
+        individual1_from_db = Individual.objects.get(id=self.individual1.id)
+        self.assertNotEqual(individual1_from_db.first_name, self.individual1_updated_first_name)
+
+        individual2_from_db = Individual.objects.get(id=self.individual2.id)
+        self.assertNotEqual(individual2_from_db.first_name, self.individual2_updated_first_name)
