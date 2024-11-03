@@ -167,6 +167,7 @@ class GroupIndividual(HistoryModel):
         service.handle_head_change(self.id, self.role, self.group_id)
         service.handle_primary_recipient_change(self.id, self.recipient_type, self.group_id)
         service.handle_assure_primary_recipient_in_group(self.group, self.recipient_type)
+        service.ensure_location_consistent(self.group, self.individual, self.role)
         service.update_json_ext_for_group(self.group)
 
     def delete(self, *args, **kwargs):

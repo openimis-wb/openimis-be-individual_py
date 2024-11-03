@@ -1,6 +1,7 @@
 import json
 from individual.tests.test_helpers import (
     create_individual,
+    create_group,
     create_group_with_individual,
     add_individual_to_group,
     IndividualGQLTestCase,
@@ -18,20 +19,14 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             group_override={'location': cls.village_a},
             individual_override={'location': cls.village_a},
         )
+
         cls.individual_a_no_group = create_individual(
             cls.admin_user.username,
             payload_override={'location': cls.village_a},
         )
-        cls.individual_a_group_no_loc, cls.group_no_loc, _ = create_group_with_individual(
-            cls.admin_user.username,
-            individual_override={'location': cls.village_a},
-        )
 
-        cls.individual_no_loc_group_a = create_individual(cls.admin_user.username)
-        add_individual_to_group(
+        cls.individual_no_loc, cls.group_no_loc, _ = create_group_with_individual(
             cls.admin_user.username,
-            cls.individual_no_loc_group_a,
-            cls.group_a,
         )
 
         cls.individual_no_loc_no_group = create_individual(cls.admin_user.username)
@@ -209,7 +204,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             )
 
         # SP officer A sees only group from their assigned districts and
-        # groups wihtout location
+        # groups without location
         permitted_uuids = [
             self.group_a.uuid,
             self.group_no_loc.uuid,
@@ -233,7 +228,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
 
 
         # SP officer B sees only group from their assigned district and
-        # groups wihtout location
+        # groups without location
         permitted_uuids = [
             self.group_b.uuid,
             self.group_no_loc.uuid,
@@ -301,9 +296,8 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_b.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_a_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_a_group_no_loc.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
 
         # Health Enrollment Officier (role=1) sees nothing
         response = self.query(
@@ -350,7 +344,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         }}'''
 
         # SP officer A sees only individual from their assigned districts
-        # individuals wihtout location, and individuals whose group has no location
+        # individuals without location, and individuals whose group has no location
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_a_user_token}"}
@@ -366,12 +360,11 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_a_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_a_group_no_loc.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
 
         # SP officer B sees only individual from their assigned district,
-        # individuals wihtout location, and individuals whose group has no location
+        # individuals without location, and individuals whose group has no location
         response = self.query(
             query_str,
             headers={"HTTP_AUTHORIZATION": f"Bearer {self.dist_b_user_token}"}
@@ -387,9 +380,8 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertFalse(str(self.individual_a.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_b.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_a_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_a_group_no_loc.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
 
 
     def test_individual_query_with_group(self):
@@ -428,7 +420,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             e['node']['uuid'] for e in individual_data['edges']
         )
         self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_a_no_group.uuid) in individual_uuids)
 
@@ -478,9 +470,8 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         permitted_uuids = [
             self.individual_a.uuid,
             self.individual_a_no_group.uuid,
-            self.individual_a_group_no_loc.uuid,
+            self.individual_no_loc.uuid,
             self.individual_no_loc_no_group.uuid,
-            self.individual_no_loc_group_a.uuid,
         ]
 
         not_permitted_uuids = [
@@ -501,12 +492,11 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
 
 
         # SP officer B sees only individual from their assigned district,
-        # individuals wihtout location, and individuals whose group has no location
+        # individuals without location, and individuals whose group has no location
         permitted_uuids = [
             self.individual_b.uuid,
-            self.individual_a_group_no_loc.uuid,
             self.individual_no_loc_no_group.uuid,
-            self.individual_no_loc_group_a.uuid,
+            self.individual_no_loc.uuid,
         ]
 
         not_permitted_uuids = [
@@ -574,7 +564,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         response = send_group_individual_query(self.group_a.uuid, self.dist_a_user_token)
         self.assertResponseNoErrors(response)
         content = json.loads(response.content)
-        self.assertEqual(content['data']['groupIndividual']['totalCount'], 2)
+        self.assertEqual(content['data']['groupIndividual']['totalCount'], 1)
 
         group_data = content['data']['groupIndividual']
 
@@ -582,7 +572,6 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             e['node']['individual']['uuid'] for e in group_data['edges']
         )
         self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
-        self.assertTrue(str(self.individual_no_loc_group_a.uuid) in individual_uuids)
 
         # SP officer A shouldn't see group individuals from other districts
         response = send_group_individual_query(self.group_b.uuid, self.dist_a_user_token)
@@ -654,11 +643,10 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             )
 
         # SP officer A sees only individuals from their assigned districts and
-        # from groups wihtout location
+        # from groups without location
         permitted_uuids = [
             self.individual_a.uuid,
-            self.individual_a_group_no_loc.uuid,
-            self.individual_no_loc_group_a.uuid,
+            self.individual_no_loc.uuid,
         ]
 
         not_permitted_uuids = [
@@ -681,15 +669,14 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             self.assertEqual(content['data']['groupIndividualHistory']['totalCount'], 0)
 
         # SP officer B sees only group from their assigned district and
-        # from groups wihtout location
+        # from groups without location
         permitted_uuids = [
             self.individual_b.uuid,
-            self.individual_a_group_no_loc.uuid,
+            self.individual_no_loc.uuid,
         ]
 
         not_permitted_uuids = [
             self.individual_a.uuid,
-            self.individual_no_loc_group_a.uuid,
         ]
 
         for uuid in permitted_uuids:

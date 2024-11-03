@@ -471,6 +471,18 @@ class GroupAndGroupIndividualAlignmentService:
             return
         self._assure_primary_recipient_in_group(group)
 
+    def ensure_location_consistent(self, group, individual, role):
+        if group.location_id == individual.location_id:
+            return
+
+        if role == GroupIndividual.Role.HEAD and group.location_id is None:
+            group.location_id = individual.location_id
+            group.save(user=self.user.user)
+        else:
+            individual.location_id = group.location_id
+            individual.save(user=self.user.user)
+
+
     def _assure_primary_recipient_in_group(self, group):
         group_individuals = GroupIndividual.objects.filter(group=group, is_deleted=False)
         primary_exists = group_individuals.filter(recipient_type=GroupIndividual.RecipientType.PRIMARY).exists()

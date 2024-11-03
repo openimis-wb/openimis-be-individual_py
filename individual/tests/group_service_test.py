@@ -1,11 +1,14 @@
 import copy
+import uuid
 
 from django.test import TestCase
 
 from individual.models import Group, Individual, GroupIndividual
 from individual.services import GroupService
 from individual.tests.data import service_group_update_payload, service_add_individual_payload
+from individual.tests.test_helpers import create_individual
 from core.test_helpers import LogInHelper
+from location.test_helpers import create_test_village
 
 from datetime import datetime
 class GroupServiceTest(TestCase):
@@ -23,12 +26,57 @@ class GroupServiceTest(TestCase):
         cls.payload = {'code': str(datetime.now())}
         cls.group_individual_query_all = GroupIndividual.objects.filter(is_deleted=False)
 
-    def test_add_group(self):
+        cls.location = create_test_village()
+        cls.individual_1 = create_individual(cls.user.username, {'location': cls.location})
+        cls.individual_2 = create_individual(cls.user.username)
+
+        cls.payload_with_individuals = {
+            'code': str(datetime.now()),
+            'individuals_data': [
+                {
+                    'individual_id': str(cls.individual_1.id),
+                    'role': 'HEAD',
+                    'recipient_type': 'PRIMARY',
+                },
+                {
+                    'individual_id': str(cls.individual_2.id),
+                    'role': 'DAUGHTER',
+                    'recipient_type': 'SECONDARY',
+                }
+            ]
+        }
+
+    def test_create_group(self):
         result = self.service.create(self.payload)
         self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
         uuid = result.get('data', {}).get('uuid', None)
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 1)
+
+    def test_create_group_with_individuals(self):
+        payload = self.payload_with_individuals
+        individuals_data = payload['individuals_data']
+
+        result = self.service.create(payload)
+
+        # Verify that the group was created
+        group = Group.objects.filter(code=payload['code']).first()
+        self.assertIsNotNone(group)
+
+        # Verify that individuals were linked to the group
+        group_individuals = GroupIndividual.objects.filter(group_id=group.id)
+        self.assertEqual(group_individuals.count(), 2)
+
+        grp_ind1 = group_individuals.get(individual_id=individuals_data[0]['individual_id'])
+        grp_ind2 = group_individuals.get(individual_id=individuals_data[1]['individual_id'])
+
+        # Verify each individual's data is correct in the GroupIndividual table
+        for group_individual, data in zip([grp_ind1, grp_ind2], individuals_data):
+            self.assertEqual(group_individual.role, data['role'])
+            self.assertEqual(group_individual.recipient_type, data['recipient_type'])
+
+        # Check that the group takes on the individual head's location
+        self.assertEqual(group.location_id, self.location.id)
 
     def test_update_group(self):
         result = self.service.create(self.payload)
