@@ -26,20 +26,23 @@ class GroupServiceTest(TestCase):
         cls.payload = {'code': str(datetime.now())}
         cls.group_individual_query_all = GroupIndividual.objects.filter(is_deleted=False)
 
-        cls.location = create_test_village()
-        cls.individual_1 = create_individual(cls.user.username, {'location': cls.location})
-        cls.individual_2 = create_individual(cls.user.username)
+    def setUp(self):
+        super().setUp()
+        self.location = create_test_village()
+        self.data_user = LogInHelper().get_or_create_user_api(username='testdatauser')
+        self.individual_1 = create_individual(self.data_user.username, {'location': self.location})
+        self.individual_2 = create_individual(self.data_user.username)
 
-        cls.payload_with_individuals = {
+        self.payload_with_individuals = {
             'code': str(datetime.now()),
             'individuals_data': [
                 {
-                    'individual_id': str(cls.individual_1.id),
+                    'individual_id': str(self.individual_1.id),
                     'role': 'HEAD',
                     'recipient_type': 'PRIMARY',
                 },
                 {
-                    'individual_id': str(cls.individual_2.id),
+                    'individual_id': str(self.individual_2.id),
                     'role': 'DAUGHTER',
                     'recipient_type': 'SECONDARY',
                 }
@@ -75,8 +78,9 @@ class GroupServiceTest(TestCase):
             self.assertEqual(group_individual.role, data['role'])
             self.assertEqual(group_individual.recipient_type, data['recipient_type'])
 
-        # Check that the group takes on the individual head's location
+        # Check that the group and rest of the members takes on the individual head's location
         self.assertEqual(group.location_id, self.location.id)
+        self.assertEqual(grp_ind2.individual.location_id, self.location.id)
 
     def test_update_group(self):
         result = self.service.create(self.payload)
@@ -89,6 +93,31 @@ class GroupServiceTest(TestCase):
         query = self.query_all.filter(uuid=uuid)
         self.assertEqual(query.count(), 1)
         self.assertEqual(query.first().date_created, update_payload.get('date_created'))
+
+    def test_update_group_location(self):
+        result = self.service.create(self.payload_with_individuals)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+
+        uuid = result.get('data', {}).get('uuid')
+        new_location = create_test_village({'code': 'NEWGUL'})
+        update_payload = {
+            'id': uuid,
+            'location_id': str(new_location.id),
+        }
+        result = self.service.update(update_payload)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+
+        # Check that group's location is updated
+        group = self.query_all.get(uuid=uuid)
+        self.assertEqual(group.location.id, new_location.id)
+
+        # Check that group members' locations are updated & history tracked
+        individuals = Individual.objects.filter(groupindividuals__group=group)
+        self.assertEqual(individuals.count(), 2)
+        for individual in individuals:
+            self.assertEqual(individual.location, new_location)
+            self.assertEqual(individual.user_updated, self.user)
+            self.assertTrue(individual.date_updated > group.date_updated)
 
     def test_delete_group(self):
         result = self.service.create(self.payload)
