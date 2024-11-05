@@ -3,7 +3,6 @@ import json
 import os
 import pandas as pd
 import uuid
-from core.test_helpers import LogInHelper
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from individual.services import IndividualImportService
@@ -20,6 +19,8 @@ from individual.tests.test_helpers import (
     assign_user_districts,
 )
 from unittest.mock import MagicMock, patch
+from core.utils import filter_validity
+from core.models.user import Role
 
 
 def count_csv_records(file_path):
@@ -38,7 +39,10 @@ class IndividualImportServiceTest(TestCase):
     def setUpClass(cls):
         super().setUpClass()
 
-        cls.admin_user = LogInHelper().get_or_create_user_api()
+        admin_role = Role.objects.filter(is_system=64, *filter_validity()).first()
+        cls.admin_user = create_test_interactive_user(
+            username="superuserme", roles=[admin_role.id]
+        )
 
         cls.csv_file_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'individual_upload.csv')
         # SimpleUploadedFile requires a bytes-like object so use 'rb' instead of 'r'
@@ -257,4 +261,49 @@ class IndividualImportServiceTest(TestCase):
                 loc_validation.get('note'),
                 "'location_name' value 'Washington D.C.' is not a valid location name. "
                 "Please check the spelling against the list of locations in the system."
+            )
+
+
+    @patch('individual.services.load_dataframe')
+    @patch('individual.services.fetch_summary_of_broken_items')
+    def test_validate_import_individuals_ambiguous_location_name(self, mock_fetch_summary, mock_load_dataframe):
+        # set up another location also named Fairfax and save to DB
+        loc_dup_name = create_test_village({
+            'name': 'Fairfax',
+            'code': 'VsB2',
+        })
+
+        dataframe = pd.read_csv(self.csv_file_path, na_filter=False)
+        dataframe['id'] = dataframe.index+1
+        mock_load_dataframe.return_value = dataframe
+
+        mock_invalid_items = {"invalid_items_count": 2}
+        mock_fetch_summary.return_value = mock_invalid_items
+
+        upload_id = uuid.uuid4()
+        individual_sources = MagicMock()
+
+        service = IndividualImportService(self.admin_user)
+        result = service.validate_import_individuals(upload_id, individual_sources)
+
+        mock_load_dataframe.assert_called_once_with(individual_sources)
+
+        # Assert that the result contains the validated dataframe and summary of invalid items
+        self.assertEqual(result['success'], True)
+        self.assertEqual(len(result['data']), dataframe.shape[0])
+        self.assertEqual(result['summary_invalid_items'], mock_invalid_items)
+
+        # Check that the validation flagged lack of permission and unrecognized locations
+        validated_rows = result['data']
+
+        rows_ambiguous_loc = [row for row in validated_rows if row['row']['location_name'] == loc_dup_name.name]
+        self.assertTrue(rows_ambiguous_loc, f'Expected at least one row with location_name={loc_dup_name.name}')
+        for row in rows_ambiguous_loc:
+            loc_validation = row['validations']['location_name']
+            self.assertFalse(loc_validation.get('success'))
+            self.assertEqual(loc_validation.get('field_name'), 'location_name')
+            self.assertEqual(
+                loc_validation.get('note'),
+                "'location_name' value 'Fairfax' is ambiguous, "
+                "because there are more than one location with this name found in the system."
             )
