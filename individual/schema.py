@@ -9,7 +9,7 @@ from django.db.models import Q, OuterRef, Subquery
 from core.custom_filters import CustomFilterWizardStorage
 from core.gql.export_mixin import ExportableQueryMixin
 from core.schema import OrderedDjangoFilterConnectionField
-from core.service import wait_for_mutation
+from core.services import wait_for_mutation
 from core.utils import append_validity_filter, is_valid_uuid
 from individual.apps import IndividualConfig
 from individual.gql_mutations import CreateIndividualMutation, UpdateIndividualMutation, DeleteIndividualMutation, \
@@ -104,7 +104,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         dateValidTo__Lte=graphene.DateTime(),
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String(),
-        first_name=graphene.String(),from core.service import wait_for_mutation
+        first_name=graphene.String(),
 
     )
 
