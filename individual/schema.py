@@ -24,6 +24,7 @@ from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, 
     GroupSummaryEnrollmentGQLType, GroupDataSourceGQLType
 from individual.models import Individual, IndividualDataSource, Group, \
     GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
+from location.apps import LocationConfig
 
 
 def patch_details(data_df: pd.DataFrame):
@@ -106,7 +107,9 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         first_name=graphene.String(),
         last_name=graphene.String(),
         customFilters=graphene.List(of_type=graphene.String),
-        benefitPlanToEnroll=graphene.String()
+        benefitPlanToEnroll=graphene.String(),
+        parent_location=graphene.String(),
+        parent_location_level=graphene.Int(),
     )
 
     group_history = OrderedDjangoFilterConnectionField(
@@ -314,6 +317,15 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 Q(is_deleted=False) &
                 ~Q(groupbeneficiary__benefit_plan_id=benefit_plan_to_enroll)
             )
+
+        parent_location = kwargs.get('parent_location')
+        parent_location_level = kwargs.get('parent_location_level')
+        if parent_location is not None and parent_location_level is not None:
+            query_key = "uuid"
+            for i in range(len(LocationConfig.location_types) - parent_location_level - 1):
+                query_key = "parent__" + query_key
+            query_key = "location__" + query_key
+            filters.append(Q(**{query_key: parent_location}))
 
         query = GroupGQLType.get_queryset(None, info)
         query = query.filter(*filters).distinct()
