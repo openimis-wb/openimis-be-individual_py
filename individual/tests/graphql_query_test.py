@@ -173,23 +173,9 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             parentLocation: "{self.village_a.uuid}",
             parentLocationLevel: 3
         ) {{
-            totalCount
-            pageInfo {{
-              hasNextPage
-              hasPreviousPage
-              startCursor
-              endCursor
-            }}
             edges {{
               node {{
-                id
                 uuid
-                code
-                head {{
-                  id
-                  firstName
-                  lastName
-                }}
               }}
             }}
           }}
@@ -243,6 +229,36 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertFalse(str(self.group_b.uuid) in group_uuids)
         self.assertFalse(str(self.group_no_loc.uuid) in group_uuids)
 
+    def test_group_query_filter_by_location_is_null(self):
+        date_created = str(self.group_a.date_created).replace(' ', 'T')
+        query_str = f'''query {{
+          group(
+            dateCreated_Gte: "{date_created}",
+            location_Isnull: true,
+        ) {{
+            edges {{
+              node {{
+                uuid
+              }}
+            }}
+          }}
+        }}'''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        group_data = content['data']['group']
+
+        group_uuids = list(
+            e['node']['uuid'] for e in group_data['edges']
+        )
+        self.assertFalse(str(self.group_a.uuid) in group_uuids)
+        self.assertFalse(str(self.group_b.uuid) in group_uuids)
+        self.assertTrue(str(self.group_no_loc.uuid) in group_uuids)
 
     def test_group_history_query_row_security(self):
         def send_group_history_query(group_uuid, as_user_token):
@@ -470,20 +486,9 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             parentLocation: "{self.village_a.uuid}",
             parentLocationLevel: 3
           ) {{
-            totalCount
-            pageInfo {{
-              hasNextPage
-              hasPreviousPage
-              startCursor
-              endCursor
-            }}
             edges {{
               node {{
-                id
                 uuid
-                firstName
-                lastName
-                dob
               }}
             }}
           }}
@@ -541,6 +546,40 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertFalse(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
+
+    def test_individual_query_filter_by_location_is_null(self):
+        date_created = str(self.individual_a.date_created).replace(' ', 'T')
+        query_str = f'''query {{
+          individual(
+            dateCreated_Gte: "{date_created}",
+            location_Isnull: true
+          ) {{
+            edges {{
+              node {{
+                uuid
+              }}
+            }}
+          }}
+        }}'''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        individual_data = content['data']['individual']
+
+        individual_uuids = list(
+            e['node']['uuid'] for e in individual_data['edges']
+        )
+        self.assertFalse(str(self.individual_a.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_a_no_group.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
+
 
     def test_individual_query_with_group(self):
         date_created = str(self.individual_a.date_created).replace(' ', 'T')
