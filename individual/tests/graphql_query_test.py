@@ -6,7 +6,7 @@ from individual.tests.test_helpers import (
     add_individual_to_group,
     IndividualGQLTestCase,
 )
-from location.test_helpers import create_test_location
+from location.test_helpers import create_test_village
 
 
 class IndividualGQLQueryTest(IndividualGQLTestCase):
@@ -211,18 +211,15 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertFalse(str(self.group_b.uuid) in group_uuids)
         self.assertFalse(str(self.group_no_loc.uuid) in group_uuids)
 
-        # Create another group whose village in the same ward as village a
-        other_village_dist_a = create_test_location('V', custom_props={
-            'name': "Another Village",
-            'code': 'VgAOther',
-        })
+        # Create another group whose village is in the same ward as village a
+        other_village_dist_a = create_test_village()
         other_village_dist_a.parent = self.village_a.parent
         other_village_dist_a.save()
-        other_dist_a_group = create_group(self.admin_user.username, {
+        other_ward_a_group = create_group(self.admin_user.username, {
             'location': other_village_dist_a,
         })
 
-        # query goes up to one loc level
+        # query goes up one loc level
         query_str = query_str.replace(
             str(self.village_a.uuid), str(self.village_a.parent.uuid)
         ).replace(
@@ -242,7 +239,7 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
             e['node']['uuid'] for e in group_data['edges']
         )
         self.assertTrue(str(self.group_a.uuid) in group_uuids)
-        self.assertTrue(str(other_dist_a_group.uuid) in group_uuids)
+        self.assertTrue(str(other_ward_a_group.uuid) in group_uuids)
         self.assertFalse(str(self.group_b.uuid) in group_uuids)
         self.assertFalse(str(self.group_no_loc.uuid) in group_uuids)
 
@@ -465,6 +462,85 @@ class IndividualGQLQueryTest(IndividualGQLTestCase):
         self.assertTrue(str(self.individual_no_loc.uuid) in individual_uuids)
         self.assertTrue(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
 
+    def test_individual_query_filter_by_location(self):
+        date_created = str(self.individual_a.date_created).replace(' ', 'T')
+        query_str = f'''query {{
+          individual(
+            dateCreated_Gte: "{date_created}",
+            parentLocation: "{self.village_a.uuid}",
+            parentLocationLevel: 3
+          ) {{
+            totalCount
+            pageInfo {{
+              hasNextPage
+              hasPreviousPage
+              startCursor
+              endCursor
+            }}
+            edges {{
+              node {{
+                id
+                uuid
+                firstName
+                lastName
+                dob
+              }}
+            }}
+          }}
+        }}'''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        individual_data = content['data']['individual']
+
+        individual_uuids = list(
+            e['node']['uuid'] for e in individual_data['edges']
+        )
+        self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_a_no_group.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
+
+        # Create another individual whose village is in the same district as village a
+        other_village_dist_a = create_test_village()
+        district_a = self.village_a.parent.parent
+        other_village_dist_a.parent.parent = district_a
+        other_village_dist_a.parent.save()
+        other_dist_a_individual = create_individual(self.admin_user.username, {
+            'location': other_village_dist_a,
+        })
+
+        # query goes up two loc levels
+        query_str = query_str.replace(
+            str(self.village_a.uuid), str(district_a.uuid)
+        ).replace(
+            f"parentLocationLevel: 3", f"parentLocationLevel: 1"
+        )
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        self.assertResponseNoErrors(response)
+
+        content = json.loads(response.content)
+        individual_data = content['data']['individual']
+
+        individual_uuids = list(
+            e['node']['uuid'] for e in individual_data['edges']
+        )
+        self.assertTrue(str(self.individual_a.uuid) in individual_uuids)
+        self.assertTrue(str(self.individual_a_no_group.uuid) in individual_uuids)
+        self.assertTrue(str(other_dist_a_individual.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_b.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc.uuid) in individual_uuids)
+        self.assertFalse(str(self.individual_no_loc_no_group.uuid) in individual_uuids)
 
     def test_individual_query_with_group(self):
         date_created = str(self.individual_a.date_created).replace(' ', 'T')
