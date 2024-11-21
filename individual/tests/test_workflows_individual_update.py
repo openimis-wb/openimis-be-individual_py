@@ -10,6 +10,8 @@ from individual.workflows.base_individual_update import process_update_individua
 from individual.tests.test_helpers import create_test_village, create_individual
 from unittest.mock import patch
 import uuid
+from unittest import skipIf
+
 
 
 class ProcessUpdateIndividualsWorkflowTest(TestCase):
