@@ -123,6 +123,10 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
         self.assertNotEqual(individual2_from_db.first_name, self.individual2_updated_first_name)
 
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_update', False)
+    @skipIf(
+    connection.vendor != "postgresql",
+    "Skipping tests due to implementation usage of validate_json_schema, which is a postgres specific extension."
+    )
     def test_process_update_individuals_workflow_with_all_valid_entries(self):
         # Update invalid entry in IndividualDataSource to valid data
         self.invalid_data_source.json_ext = {
