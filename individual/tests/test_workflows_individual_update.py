@@ -1,3 +1,4 @@
+from django.db import connection
 from django.test import TestCase
 from core.test_helpers import create_test_interactive_user
 from individual.models import (
@@ -80,6 +81,7 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
                 "last_name": "Doe",
                 "dob": "1980-01-01",
                 "location_name": self.village.name,
+                "location_code": self.village.code,
             }
         )
         self.valid_data_source.save(user=self.user)
@@ -96,8 +98,8 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
 
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_update', False)
     @skipIf(
-    connection.vendor != "postgresql",
-    "Skipping tests due to implementation usage of validate_json_schema, which is a postgres specific extension."
+        connection.vendor != "postgresql",
+        "Skipping tests due to implementation usage of validate_json_schema, which is a postgres specific extension."
     )
     def test_process_update_individuals_workflow_successful_execution(self):
         process_update_individuals_workflow(self.user_uuid, self.upload_uuid)
@@ -130,8 +132,8 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
 
     @patch('individual.apps.IndividualConfig.enable_maker_checker_for_individual_update', False)
     @skipIf(
-    connection.vendor != "postgresql",
-    "Skipping tests due to implementation usage of validate_json_schema, which is a postgres specific extension."
+        connection.vendor != "postgresql",
+        "Skipping tests due to implementation usage of validate_json_schema, which is a postgres specific extension."
     )
     def test_process_update_individuals_workflow_with_all_valid_entries(self):
         # Update invalid entry in IndividualDataSource to valid data
@@ -139,6 +141,7 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
             "ID": str(self.individual2.id),
             "first_name": self.individual2_updated_first_name,
             "location_name": None,
+            "location_code": None,
         }
         self.invalid_data_source.save(user=self.user)
 
@@ -170,6 +173,7 @@ class ProcessUpdateIndividualsWorkflowTest(TestCase):
             "ID": str(self.individual2.id),
             "first_name": "Jane",
             "location_name": None,
+            "location_code": None,
         }
         self.invalid_data_source.save(user=self.user)
 
