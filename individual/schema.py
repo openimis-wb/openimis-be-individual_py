@@ -25,6 +25,7 @@ from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, 
     GroupSummaryEnrollmentGQLType, GroupDataSourceGQLType
 from individual.models import Individual, IndividualDataSource, Group, \
     GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
+from location.apps import LocationConfig
 
 
 def patch_details(data_df: pd.DataFrame):
@@ -66,6 +67,8 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         benefitPlanToEnroll=graphene.String(),
         benefitPlanId=graphene.String(),
         filterNotAttachedToGroup=graphene.Boolean(),
+        parent_location=graphene.String(),
+        parent_location_level=graphene.Int(),
     )
 
     individual_history = OrderedDjangoFilterConnectionField(
@@ -105,7 +108,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         applyDefaultValidityFilter=graphene.Boolean(),
         client_mutation_id=graphene.String(),
         first_name=graphene.String(),
-
+        last_name=graphene.String(),
+        customFilters=graphene.List(of_type=graphene.String),
+        benefitPlanToEnroll=graphene.String(),
+        parent_location=graphene.String(),
+        parent_location_level=graphene.Int(),
     )
 
     group_history = OrderedDjangoFilterConnectionField(
@@ -187,6 +194,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         if filter_not_attached_to_group:
             subquery = GroupIndividual.objects.filter(individual=OuterRef('pk')).values('individual')
             filters.append(~Q(pk__in=Subquery(subquery)))
+
+        parent_location = kwargs.get('parent_location')
+        parent_location_level = kwargs.get('parent_location_level')
+        if parent_location is not None and parent_location_level is not None:
+            filters.append(Query._get_location_filters(parent_location, parent_location_level))
 
         query = IndividualGQLType.get_queryset(None, info)
         query = query.filter(*filters)
@@ -320,6 +332,11 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
                 ~Q(groupbeneficiary__benefit_plan_id=benefit_plan_to_enroll)
             )
 
+        parent_location = kwargs.get('parent_location')
+        parent_location_level = kwargs.get('parent_location_level')
+        if parent_location is not None and parent_location_level is not None:
+            filters.append(Query._get_location_filters(parent_location, parent_location_level))
+
         query = GroupGQLType.get_queryset(None, info)
         query = query.filter(*filters).distinct()
 
@@ -441,6 +458,14 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
     def _check_permissions(user, perms):
         if type(user) is AnonymousUser or not user.id or not user.has_perms(perms):
             raise PermissionError("Unauthorized")
+
+    @staticmethod
+    def _get_location_filters(parent_location, parent_location_level):
+        query_key = "uuid"
+        for i in range(len(LocationConfig.location_types) - parent_location_level - 1):
+            query_key = "parent__" + query_key
+        query_key = "location__" + query_key
+        return Q(**{query_key: parent_location})
 
 
 class Mutation(graphene.ObjectType):
