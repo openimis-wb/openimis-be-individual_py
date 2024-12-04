@@ -353,7 +353,11 @@ class DeleteGroupMutation(BaseHistoryModelDeleteMutationMixin, BaseMutation):
         if ids:
             with transaction.atomic():
                 for identifier in ids:
-                    service.delete({'id': identifier})
+                    obj_data = {'id': identifier}
+                    if IndividualConfig.check_group_delete:
+                        service.create_delete_task(obj_data)
+                    else:
+                        service.delete(obj_data)
 
     class Input(OpenIMISMutation.Input):
         ids = graphene.List(graphene.UUID)

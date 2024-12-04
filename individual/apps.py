@@ -21,6 +21,7 @@ DEFAULT_CONFIG = {
     "check_individual_delete": True,
     "check_group_individual_update": True,
     "check_group_create": True,
+    "check_group_delete": True,
     "individual_schema": "{}",
     "individual_accept_enrolment": "individual_service.create_accept_enrolment_task",
     "validation_import_valid_items_workflow": "individual-import-valid-items",
@@ -63,6 +64,7 @@ class IndividualConfig(AppConfig):
     check_individual_delete = None
     check_group_individual_update = None
     check_group_create = None
+    check_group_delete = None
     python_individual_import_workflow_group = None
     python_individual_import_workflow_name = None
     individual_schema = None

@@ -151,7 +151,12 @@ class IndividualDataSourceService(BaseService):
         super().__init__(user, validation_class)
 
 
-class GroupService(BaseService, CreateCheckerLogicServiceMixin, UpdateCheckerLogicServiceMixin):
+class GroupService(
+    BaseService,
+    CreateCheckerLogicServiceMixin,
+    UpdateCheckerLogicServiceMixin,
+    DeleteCheckerLogicServiceMixin
+):
     OBJECT_TYPE = Group
 
     def __init__(self, user, validation_class=GroupValidation):

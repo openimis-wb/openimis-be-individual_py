@@ -5,10 +5,12 @@ from individual.tests.test_helpers import (
     create_group_with_individual,
     IndividualGQLTestCase,
 )
-from individual.models import GroupIndividual
+from individual.models import GroupIndividual, Group
+from tasks_management.models import Task
 from unittest.mock import patch
 from individual.apps import IndividualConfig
 from django.utils.translation import gettext as _
+from django.contrib.contenttypes.models import ContentType
 
 
 class GroupGQLMutationTest(IndividualGQLTestCase):
@@ -216,6 +218,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         internal_id = content['data']['updateGroup']['internalId']
         self.assert_mutation_success(internal_id)
 
+    @patch.object(IndividualConfig, 'check_group_delete', False)
     def test_delete_group_general_permission(self):
         group1 = create_group(
             self.admin_user.username,
@@ -263,6 +266,7 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         internal_id = content['data']['deleteGroup']['internalId']
         self.assert_mutation_success(internal_id)
 
+    @patch.object(IndividualConfig, 'check_group_delete', False)
     def test_delete_group_row_security(self):
         group_a1 = create_group(
             self.admin_user.username,
@@ -347,6 +351,46 @@ class GroupGQLMutationTest(IndividualGQLTestCase):
         content = json.loads(response.content)
         internal_id = content['data']['deleteGroup']['internalId']
         self.assert_mutation_success(internal_id)
+
+    @patch.object(IndividualConfig, 'check_group_delete', True)
+    def test_delete_group_with_check(self):
+        group = create_group(self.admin_user.username)
+        query_str = f'''
+                mutation {{
+                  deleteGroup(
+                    input: {{
+                      ids: ["{group.id}"]
+                    }}
+                  ) {{
+                    clientMutationId
+                    internalId
+                  }}
+                }}
+            '''
+
+        response = self.query(
+            query_str,
+            headers={"HTTP_AUTHORIZATION": f"Bearer {self.admin_token}"}
+        )
+        content = json.loads(response.content)
+        internal_id = content['data']['deleteGroup']['internalId']
+        self.assert_mutation_success(internal_id)
+
+        # Check that the group is not yet deleted
+        group_query = Group.objects.filter(
+            is_deleted=False,
+            id=group.id,
+        )
+        self.assertEqual(group_query.count(), 1)
+
+        # Check that a group delete task is created
+        task_query = Task.objects.filter(
+            entity_type=ContentType.objects.get_for_model(Group),
+            entity_id=group.id,
+            business_event='GroupService.delete',
+        )
+        self.assertEqual(task_query.count(), 1)
+
 
     def test_add_individual_to_group_general_permission(self):
         group = create_group(self.admin_user.username)

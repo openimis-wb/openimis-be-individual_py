@@ -195,6 +195,33 @@ class GroupServiceTest(TestCase):
         # self.assertFalse(individual2.id in individual_ids)
         self.assertTrue(individual3.id in individual_ids)
 
+    def test_delete_group_with_individual(self):
+        individual1 = self.__create_individual()
+        individual2 = self.__create_individual()
+        payload_individuals = {
+            'code': str(datetime.now()),
+            'individuals_data': [
+                {'individual_id': str(individual1.id)},
+                {'individual_id': str(individual2.id)},
+            ]
+        }
+        result = self.service.create(payload_individuals)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        uuid = result.get('data', {}).get('uuid', None)
+        query = self.query_all.filter(uuid=uuid)
+        group = query.first()
+        self.assertEqual(query.count(), 1)
+        self.assertEqual(str(group.id), uuid)
+        group_individual_query = self.group_individual_query_all.filter(group=group)
+        self.assertEqual(group_individual_query.count(), 2)
+        delete_payload = {'id': uuid}
+        result = self.service.delete(delete_payload)
+        self.assertTrue(result.get('success', False), result.get('detail', "No details provided"))
+        query = self.query_all.filter(uuid=uuid)
+        self.assertEqual(query.count(), 0)
+        group_individual_query = self.group_individual_query_all.filter(group=group)
+        self.assertEqual(group_individual_query.count(), 0)
+
     @classmethod
     def __create_individual(cls):
         object_data = {
