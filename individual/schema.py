@@ -26,6 +26,7 @@ from individual.gql_queries import IndividualGQLType, IndividualHistoryGQLType, 
 from individual.models import Individual, IndividualDataSource, Group, \
     GroupIndividual, IndividualDataSourceUpload, IndividualDataUploadRecords, GroupDataSource
 from individual.services import IndividualService, GroupService
+from social_protection.apps import SocialProtectionConfig
 from location.apps import LocationConfig
 
 
@@ -39,6 +40,7 @@ def patch_details(data_df: pd.DataFrame):
         return df_final
     return data_df
 
+DEFAULT_BENEFICIARY_STATUS = SocialProtectionConfig.default_beneficiary_status
 
 class Query(ExportableQueryMixin, graphene.ObjectType):
     export_patches = {
@@ -224,7 +226,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         service = IndividualService(user)
         custom_filters = kwargs.get("customFilters", None)
         benefit_plan_id = kwargs.get("benefitPlanId", None)
-        status = kwargs.get("status", "ACTIVE")
+        status = kwargs.get("status", DEFAULT_BENEFICIARY_STATUS)
 
         enrollment_checks = service.run_enrollment_checks(
             custom_filters,
@@ -420,7 +422,7 @@ class Query(ExportableQueryMixin, graphene.ObjectType):
         service = GroupService(user)
         custom_filters = kwargs.get("customFilters", None)
         benefit_plan_id = kwargs.get("benefitPlanId", None)
-        status = kwargs.get("status", "ACTIVE")
+        status = kwargs.get("status", DEFAULT_BENEFICIARY_STATUS)
 
         enrollment_checks = service.run_enrollment_checks(
             custom_filters,
