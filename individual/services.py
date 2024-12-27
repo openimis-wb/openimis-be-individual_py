@@ -114,7 +114,7 @@ class IndividualService(BaseService, UpdateCheckerLogicServiceMixin, DeleteCheck
             benefit_plan = BenefitPlan.objects.get(id=benefit_plan_id)
             max_active_beneficiaries = benefit_plan.max_beneficiaries
 
-            if max_active_beneficiaries:
+            if max_active_beneficiaries is not None:
                 prospective_active_beneficiaries = num_individuals_to_enroll + num_individuals_assigned_to_selected_programme_and_status
                 max_active_beneficiaries_exceeded = prospective_active_beneficiaries > max_active_beneficiaries
 
@@ -331,7 +331,7 @@ class GroupService(
             benefit_plan = BenefitPlan.objects.get(id=benefit_plan_id)
             max_active_beneficiaries = benefit_plan.max_beneficiaries
 
-            if max_active_beneficiaries:
+            if max_active_beneficiaries is not None:
                 prospective_active_beneficiaries = num_groups_to_enroll + num_groups_assigned_to_selected_programme_and_status
                 max_active_beneficiaries_exceeded = prospective_active_beneficiaries > max_active_beneficiaries
 

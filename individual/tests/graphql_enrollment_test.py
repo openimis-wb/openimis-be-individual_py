@@ -53,7 +53,7 @@ class EnrollmentGQLTest(IndividualGQLTestCase):
                     add_group_to_benefit_plan(cls.group_benef_service, benef, plan, payload_override={'status': status})
 
         cls.benefit_plan_indiv = create_benefit_plan(cls.admin_user.username, payload_override={
-            'code': 'SGQLBase', 'type': "INDIVIDUAL"
+            'code': 'SGQLBase', 'type': "INDIVIDUAL", 'max_beneficiaries': None
         })
 
         cls.benefit_plan_indiv_max_active_benefs = create_benefit_plan(cls.admin_user.username, payload_override={
@@ -61,7 +61,7 @@ class EnrollmentGQLTest(IndividualGQLTestCase):
         })
 
         cls.benefit_plan_group = create_benefit_plan(cls.admin_user.username, payload_override={
-            'code': 'GGQLBase', 'type': "GROUP"
+            'code': 'GGQLBase', 'type': "GROUP", 'max_beneficiaries': None
         })
 
         cls.benefit_plan_group_max_active_benefs = create_benefit_plan(cls.admin_user.username, payload_override={
@@ -223,6 +223,7 @@ class EnrollmentGQLTest(IndividualGQLTestCase):
             )
         
         for i, case in enumerate(self.group_enrollment_cases):
+            print(case.benefit_plan.name, case.benefit_plan.max_beneficiaries)
             response = send_group_enrollment_summary_query(case.benefit_plan.uuid, case.status, case.custom_filters)
             self.assertResponseNoErrors(response)
             summary = json.loads(response.content)['data']['groupEnrollmentSummary']
