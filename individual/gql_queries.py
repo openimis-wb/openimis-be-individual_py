@@ -18,6 +18,12 @@ def _have_permissions(user, permission):
     return user.has_perms(permission)
 
 
+class GroupIndividualRoleMixin:
+    def resolve_role(self, info):
+        # Stored values outside the enum are not representable in GraphQL.
+        return self.role if self.role in GroupIndividual.Role.values else None
+
+
 class JsonExtMixin:
     def resolve_json_ext(self, info):
         if _have_permissions(info.context.user, IndividualConfig.gql_individual_search_perms):
@@ -183,7 +189,7 @@ class GroupHistoryGQLType(DjangoObjectType):
         return queryset.filter(id__in=accessible_uuids)
 
 
-class GroupIndividualGQLType(DjangoObjectType):
+class GroupIndividualGQLType(DjangoObjectType, GroupIndividualRoleMixin):
     uuid = graphene.String(source='uuid')
 
     class Meta:
@@ -207,7 +213,7 @@ class GroupIndividualGQLType(DjangoObjectType):
         return GroupIndividual.get_queryset(queryset, info.context.user)
 
 
-class GroupIndividualHistoryGQLType(DjangoObjectType):
+class GroupIndividualHistoryGQLType(DjangoObjectType, GroupIndividualRoleMixin):
     uuid = graphene.String(source='uuid')
     user_updated = graphene.Field(UserGQLType)
 
